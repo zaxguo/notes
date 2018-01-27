@@ -1,2 +1,2 @@
 # notes
-Scattered pieces of my thoughts
+Scattered pieces of my thoughts, writeups, technical notes, etc.
