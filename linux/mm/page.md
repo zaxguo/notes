@@ -126,6 +126,8 @@ After wrting is done, the system will unmap the virtual address of the data page
 ``page->private`` is not the same as the physical data page neither. 
 
 This (also from experiments), implies that when writing to some data page, ``page struct`` does not keep a record of which phyiscal page it is associated with (?).
+It only cares about the **accounting** of these pages (i.e., through page struct).
+Whenever we need to modify the physical page associated with a page struct, we should call ``kmap_atomic()`` to map that physical data page so that we may write/read.
 
 
 
