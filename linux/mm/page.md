@@ -60,9 +60,10 @@ void *kmap_atomic(struct page *page)
 And the actual physical pages can be retrieved by:
 
 ```c
-truct page_address_map {
+struct page_address_map {
 	struct page *page;
-	void *virtual;
+	/* store the VA of the physical data page */
+	void *virtual; 
 	struct list_head list;
 };
 
@@ -115,6 +116,18 @@ done:
 }
 
 ```
+
+The phyiscal page associated with a page struct is stored in ``page_address_map->virtual`` and is set by ``set_page_address(struct page *page, void *virtual)`` if the page is in highmem.
+This function takes a page struct and a virtual address, assigns the virtual address to the corresponding ``page_address_map`` entry in the hash table, adds it to the ``page_address_slot`` list.
+If the page is not in highmem (i.e., with a highmem flag set), it is linearly mapped as are other kernel space addresses.
+
+Since the pagecache subsystem directly uses the facility provided by page allocator, and it does not specify which kind of page it wants (i.e., through GFP flags), the page used to hold user data can come from **both highmem and lowmem**.
+After wrting is done, the system will unmap the virtual address of the data page.
+``page->private`` is not the same as the physical data page neither. 
+
+This (also from experiments), implies that when writing to some data page, ``page struct`` does not keep a record of which phyiscal page it is associated with (?).
+
+
 
 
 
