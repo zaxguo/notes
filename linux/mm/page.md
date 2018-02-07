@@ -2,7 +2,7 @@
 
 
 
-### Page allocation on the critical path of pagecache 
+### Page operations on the write path of pagecache 
 
 A simple (buffered) ``write()`` in EXT2 file system uses the generic kernel interface which uses page cache to buffer all the content to be written.
 
@@ -36,8 +36,7 @@ The main function to convert a *page struct* to a usable data page to hold data 
 
 ```c
 void *kmap_atomic(struct page *page)
-{
-	pagefault_disable();
+{	... 
 	if (!PageHighMem(page))
 		return page_address(page); /* Used if not HIGHMEM */
 
@@ -53,36 +52,19 @@ void *kmap_atomic(struct page *page)
 		kmap = kmap_high_get(page);
 	if (kmap)
 		return kmap;
+	/* idx is a CPU-related offset so that kmap can be atomic */
+	vaddr = __fix_to_virt(idx);
+	/* setup the PTE */
+	set_fixmap_pte(idx, mk_pte(page, kmap_prot));
 	return (void *)vaddr;
 }
 ```
 
-And the actual physical pages can be retrieved by:
+And the actual physical pages can be retrieved ``page_address()``, note in ARM, when ``WANT_PAGE_VIRTUAL`` is not set, this function only works for lowmem which is always mapped.
+Otherwise it'll map some highmem from FIXMAP.
 
 ```c
-struct page_address_map {
-	struct page *page;
-	/* store the VA of the physical data page */
-	void *virtual; 
-	struct list_head list;
-};
-
-static struct page_address_map page_address_maps[LAST_PKMAP];
-
-/*
- * Hash table bucket
- */
-static struct page_address_slot {
-	struct list_head lh;			/* List of page_address_maps */
-	spinlock_t lock;			/* Protect this bucket's list */
-} ____cacheline_aligned_in_smp page_address_htable[1<<PA_HASH_ORDER];
-
-static struct page_address_slot *page_slot(const struct page *page)
-{
-	return &page_address_htable[hash_ptr(page, PA_HASH_ORDER)];
-}
-
-/**
+**
  * page_address - get the mapped virtual address of a page
  * @page: &struct page to get the virtual address of
  *
@@ -117,7 +99,7 @@ done:
 
 ```
 
-The phyiscal page associated with a page struct is stored in ``page_address_map->virtual`` and is set by ``set_page_address(struct page *page, void *virtual)`` if the page is in highmem.
+The phyiscal page associated with a page struct is stored in ``page_address_map->virtual`` and is set by ``set_page_address(struct page *page, void *virtual)`` if the page is in highmem (with ``WANT_PAGE_VIRTUAL`` set).
 This function takes a page struct and a virtual address, assigns the virtual address to the corresponding ``page_address_map`` entry in the hash table, adds it to the ``page_address_slot`` list.
 If the page is not in highmem (i.e., with a highmem flag set), it is linearly mapped as are other kernel space addresses.
 
@@ -130,7 +112,14 @@ It only cares about the **accounting** of these pages (i.e., through page struct
 Whenever we need to modify the physical page associated with a page struct, we should call ``kmap_atomic()`` to map that physical data page so that we may write/read.
 
 
-
+### Page operations on the read path of pagecache 
+```c
+Sys_read() -->
+	vfs_read() -->
+		__vfs_read() -->
+			generic_file_read_iter() -->
+				pagecache_get_page() -->
+```
 
 
 
